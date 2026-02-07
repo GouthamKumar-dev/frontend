@@ -198,23 +198,13 @@ const EditProductModal = ({
   onSave,
   loading,
 }: any) => {
-  // Theme Detection for styles
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsDarkMode(
-        document.documentElement.classList.contains("dark") ||
-          localStorage.getItem("theme") === "dark"
-      );
-    }
-  }, []);
-
   const [formData, setFormData] = useState({
     name: "",
     product_code: "",
     description: "",
     price: "",
     stock: "",
+    discount_percentage: "",
     category: {
       category_code: "",
       name: "",
@@ -225,6 +215,8 @@ const EditProductModal = ({
   const [currentImageUrl, setCurrentImageUrl] = useState<string>("");
   const [dragActive, setDragActive] = useState(false);
 
+  console.log("product in edit modal", product);
+
   // Initialize data
   useEffect(() => {
     if (product) {
@@ -234,6 +226,7 @@ const EditProductModal = ({
         description: product.description,
         price: product.price,
         stock: product.stock.toString(),
+        discount_percentage: product.discount_percentage?.toString() || "",
         category: {
           category_code: product.category?.category_code || "",
           name: product.category?.name || "",
@@ -274,7 +267,7 @@ const EditProductModal = ({
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.size > 2 * 1024 * 1024) {
+      if (file.size > 2048576) {
         toast.error("Image must be < 2MB");
         return;
       }
@@ -284,7 +277,17 @@ const EditProductModal = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(product.product_id, formData, selectedImage);
+    // normalize/convert numeric fields before sending
+    const payload = {
+      category: formData.category,
+      product_code: formData.product_code,
+      name: formData.name,
+      description: formData.description,
+      price: Number(formData.price),
+      discount_percentage: Number(formData.discount_percentage) || 0,
+      stock: Number(formData.stock),
+    };
+    onSave(product.product_id, payload, selectedImage);
   };
 
   // Determine image for preview
@@ -378,7 +381,7 @@ const EditProductModal = ({
                         />
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <ModalInput
                           label="Price"
                           id="e-price"
@@ -397,6 +400,20 @@ const EditProductModal = ({
                           value={formData.stock}
                           onChange={(e: any) =>
                             setFormData({ ...formData, stock: e.target.value })
+                          }
+                          disabled={loading}
+                          placeholder="0"
+                        />
+                        <ModalInput
+                          label="Discount %"
+                          id="e-discount"
+                          type="number"
+                          value={formData.discount_percentage}
+                          onChange={(e: any) =>
+                            setFormData({
+                              ...formData,
+                              discount_percentage: e.target.value,
+                            })
                           }
                           disabled={loading}
                           placeholder="0"
@@ -601,6 +618,7 @@ export const ListAllProductTable = () => {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageList, setImageList] = useState<any[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [search, setSearch] = useState("");
@@ -615,23 +633,22 @@ export const ListAllProductTable = () => {
     setLoading(true);
     setError(null);
     try {
+      // Backend automatically filters by admin role
+      // Admin users will only see their own products
       const response = await axios.get<ProductApiResponse>(
-        `${domainUrl}products/productdetail/`,
+        `${domainUrl}products/productdetail/?page=1&page_size=1000000&is_active=true`,
         {
-          params: {
-            is_active: true,
-            page: page + 1,
-            page_size: rowsPerPage,
-            search: search || undefined,
-          },
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${access_token}`,
           },
-        }
+        },
       );
+
       setProducts(response.data.results);
       setTotalCount(response.data.count);
+      // fetch uploads/images list as well
+      fetchImages();
     } catch (err: any) {
       if (err.response?.data.code === "token_not_valid") {
         logOutHandler();
@@ -642,6 +659,27 @@ export const ListAllProductTable = () => {
       setError("Failed to load products.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchImages = async () => {
+    try {
+      const resp = await axios.get(
+        `${domainUrl}products/uploads/?page_size=1000000`,
+        {
+          headers: { Authorization: `Bearer ${access_token}` },
+        },
+      );
+      // support both paginated and non-paginated responses
+      const imgs = Array.isArray(resp.data)
+        ? resp.data
+        : Array.isArray(resp.data.results)
+          ? resp.data.results
+          : [];
+      setImageList(imgs);
+    } catch (err) {
+      // don't block product listing on image fetch errors
+      console.debug("Failed to load image list", err);
     }
   };
 
@@ -672,37 +710,192 @@ export const ListAllProductTable = () => {
     setIsDeleteOpen(true);
   };
 
+  const uploadProductImages = async (
+    productId: number,
+    selectedImage: File | null,
+    selectedBannerImage: File | null = null,
+  ) => {
+    const token = access_token;
+    let imageSuccess = false;
+    let bannerSuccess = false;
+
+    try {
+      // Upload normal image if selected
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append("product", String(productId));
+
+        // Find if a normal image exists for this product in imageList
+        // normalize id comparisons (some APIs return product as string)
+        const pid = String(productId);
+        const filteredNormal = imageList.filter((img) => {
+          const t = img?.type;
+          const imgProduct = img?.product ?? img?.product_id;
+          return (!t || t === "normal") && String(imgProduct) === pid;
+        });
+
+        if (filteredNormal.length > 0) {
+          // update existing upload (use the last matching one)
+          formData.append("image", selectedImage as any);
+          const last = filteredNormal[filteredNormal.length - 1];
+          const id = last?.id ?? last?.upload_id ?? last?.pk;
+          if (id) {
+            console.log("updateee", id);
+
+            const resp = await axios.put(
+              `${domainUrl}products/uploads/${id}/`,
+              formData,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+            if (resp.status === 200) imageSuccess = true;
+          } else {
+            // fallback to create if we couldn't find an id
+            formData.append("normal_image", selectedImage as any);
+            const resp = await axios.post(
+              `${domainUrl}products/uploads/`,
+              formData,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+            if (resp.status === 201) imageSuccess = true;
+          }
+        } else {
+          formData.append("normal_image", selectedImage as any);
+          const resp = await axios.post(
+            `${domainUrl}products/uploads/`,
+            formData,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+          if (resp.status === 201) imageSuccess = true;
+        }
+      }
+
+      // Upload banner image if selected
+      if (selectedBannerImage) {
+        const formData = new FormData();
+        formData.append("product", String(productId));
+
+        // Find if a carousel image exists for this product in imageList
+        const pid = String(productId);
+        const filteredBanner = imageList.filter((img) => {
+          const imgProduct = img?.product ?? img?.product_id;
+          return String(imgProduct) === pid && img?.type === "carousel";
+        });
+
+        if (filteredBanner.length > 0) {
+          formData.append("image", selectedBannerImage as any);
+          const last = filteredBanner[filteredBanner.length - 1];
+          const id = last?.id ?? last?.upload_id ?? last?.pk;
+          if (id) {
+            const resp = await axios.put(
+              `${domainUrl}products/uploads/${id}/`,
+              formData,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+            if (resp.status === 200) bannerSuccess = true;
+          } else {
+            formData.append("carousel_image", selectedBannerImage as any);
+            const resp = await axios.post(
+              `${domainUrl}products/uploads/`,
+              formData,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+            if (resp.status === 201) bannerSuccess = true;
+          }
+        } else {
+          formData.append("carousel_image", selectedBannerImage as any);
+          const resp = await axios.post(
+            `${domainUrl}products/uploads/`,
+            formData,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+          if (resp.status === 201) bannerSuccess = true;
+        }
+      }
+
+      // Set states and show toast according to success
+      if (imageSuccess || bannerSuccess) {
+        // Refresh data
+        fetchProducts();
+        fetchImages();
+        // clear existing toasts and show success
+        // toast.dismiss();
+        // toast.success("Product updated successfully");
+      }
+    } catch (err: any) {
+      if (err.response?.data?.code == "token_not_valid") {
+        logOutHandler();
+        navigate("/login");
+        toast.error("Session expired. Please log in again.", {
+          position: "top-right",
+          duration: 3000,
+        });
+        return;
+      }
+      console.debug("Image upload error", err?.response || err);
+      setError("Image upload failed.");
+    }
+  };
+
   const handleEditSave = async (
     id: number,
     data: any,
-    imageFile: File | null
+    imageFile: File | null,
   ) => {
     setActionLoading(true);
     try {
-      // 1. Update Product Details
-      await axios.put(`${domainUrl}products/productdetail/${id}/`, data, {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
+      // Update product details
+      const resp = await axios.put(
+        `${domainUrl}products/productdetail/${id}/`,
+        data,
+        {
+          headers: { Authorization: `Bearer ${access_token}` },
+        },
+      );
 
-      // 2. Upload Image if changed
-      if (imageFile) {
-        const formData = new FormData();
-        formData.append("image", imageFile);
-        formData.append("product", id.toString());
-        // Check if existing image needs update (PUT) or new upload (POST) - simplified to POST usually works for overwrite or add
-        // Ideally check backend logic. Assuming POST overwrites or adds new.
-        await axios.post(`${domainUrl}products/uploads/`, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${access_token}`,
-          },
-        });
+      if (resp.status !== 200 && resp.status !== 204) {
+        throw new Error("Update failed.");
       }
 
-      toast.success("Product updated successfully");
+      // Upload or update image
+      if (imageFile) {
+        await uploadProductImages(id, imageFile, null);
+      }
+
       setIsEditOpen(false);
-      fetchProducts(); // Refresh list
-    } catch (error) {
+      fetchProducts();
+      fetchImages();
+      toast.success("Product updated successfully");
+    } catch (err: any) {
+      if (err.response?.data?.code === "token_not_valid") {
+        logOutHandler();
+        navigate("/login");
+        toast.error("Session expired.");
+        return;
+      }
       toast.error("Failed to update product");
     } finally {
       setActionLoading(false);
@@ -717,7 +910,7 @@ export const ListAllProductTable = () => {
         `${domainUrl}products/productdetail/${selectedProduct.product_id}/`,
         {
           headers: { Authorization: `Bearer ${access_token}` },
-        }
+        },
       );
       toast.success("Product deleted");
       setIsDeleteOpen(false);
@@ -911,8 +1104,8 @@ export const ListAllProductTable = () => {
                               row.stock > 10
                                 ? "bg-emerald-500"
                                 : row.stock > 0
-                                ? "bg-amber-500"
-                                : "bg-red-500"
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
                             }`}
                           />
                           <span

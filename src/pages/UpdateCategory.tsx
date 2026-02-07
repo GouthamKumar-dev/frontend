@@ -10,7 +10,6 @@ import {
   ArrowLeftIcon,
   PhotoIcon,
   ArrowPathIcon,
-  CheckCircleIcon,
   XCircleIcon,
   CloudArrowUpIcon,
   PencilSquareIcon,
@@ -197,7 +196,7 @@ const UpdateCategory: React.FC = () => {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
         const file = e.dataTransfer.files[0];
-        if (file.size > 1024 * 1024) {
+        if (file.size >2048576) {
             setError("Image size must be less than 1MB.");
             return;
         }
@@ -209,24 +208,56 @@ const UpdateCategory: React.FC = () => {
     setError("");
     if (!selectedImage) return;
 
-    const formDataImg = new FormData();
-    formDataImg.append("image", selectedImage);
-    formDataImg.append("category", categoryId.toString());
-    formDataImg.append("type", "normal");
-
     try {
-      const imageResp = await axios.post(
-        `${domainUrl}products/uploads/`,
-        formDataImg,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${access_token}`,
-          },
-        }
+      // Check if category already has an image
+      const existingImage = selectedCategory?.images?.find(
+        (img) => img.type === "normal"
       );
-      if (imageResp.status === 201) {
-        toast.success("Image updated.");
+
+      if (existingImage) {
+
+        console.log('inside existingggg');
+        
+        // UPDATE existing image - use "image" field
+        const formDataImg = new FormData();
+        formDataImg.append("category_id", categoryId.toString());
+        formDataImg.append("image", selectedImage); // PUT expects "image"
+
+        const imageResp = await axios.put(
+          `${domainUrl}products/uploads/${existingImage.id}/`,
+          formDataImg,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${access_token}`,
+            },
+          }
+        );
+        if (imageResp.status === 200) {
+          toast.success("Image updated.");
+        }
+      } else {
+
+        console.log('inside neww');
+
+        // CREATE new image - use "normal_image" field
+        const formDataImg = new FormData();
+        formDataImg.append("category_id", categoryId.toString());
+        formDataImg.append("normal_image", selectedImage); // POST expects "normal_image"
+
+        const imageResp = await axios.post(
+          `${domainUrl}products/uploads/`,
+          formDataImg,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${access_token}`,
+            },
+          }
+        );
+        if (imageResp.status === 201) {
+          toast.success("Image added.");
+        }
       }
     } catch (err: any) {
       setError("Image upload failed.");

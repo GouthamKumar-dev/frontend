@@ -26,6 +26,7 @@ import {
 
   // Orders & Security
   ClipboardDocumentListIcon, // Orders
+  BanknotesIcon, // Settlement History
 } from "@heroicons/react/24/outline";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Logo from "../assets/logo2.png";
@@ -57,7 +58,7 @@ export default function Layout() {
   const user_name = localStorage.getItem("user_name");
   
   // --- Theme State & Logic ---
-  const [darkMode, setDarkMode] = useState(() => {
+  const [darkMode, _setDarkMode] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("theme") === "dark" || 
              (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -118,6 +119,14 @@ export default function Layout() {
         icon: ClipboardDocumentListIcon,
         subMenus: [
           { title: "View All Orders", src: "/list-orders", icon: ListBulletIcon },
+          { title: "Settlement History", src: "/settlement-history", icon: BanknotesIcon },
+        ],
+      },
+      {
+        title: "Account Settings",
+        icon: BanknotesIcon,
+        subMenus: [
+          { title: "Bank Details", src: "/bank-details", icon: BanknotesIcon },
         ],
       },
     ],
@@ -481,7 +490,7 @@ export default function Layout() {
                             localStorage.clear();
                             navigate("/login");
                           }}
-                          className="w-full py-3 border border-gray-200 dark:border-zinc-800 rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors"
+                          className="w-full py-3 border border-gray-200 dark:border-zinc-800 dark:text-white rounded-xl text-sm font-semibold hover:bg-gray-50 dark:hover:bg-zinc-900 transition-colors"
                         >
                           Sign Out
                         </button>
