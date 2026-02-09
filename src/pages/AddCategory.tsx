@@ -30,8 +30,12 @@ const AddCategory: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedCarouselImage, setSelectedCarouselImage] =
+    useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [carouselDragActive, setCarouselDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const carouselFileInputRef = useRef<HTMLInputElement>(null);
   // --- Image Handling Logic ---
   const handleFileValidation = (file: File) => {
     if (file.size > 1048576) {
@@ -75,15 +79,46 @@ const AddCategory: React.FC = () => {
     }
   };
 
+  // Carousel image handlers
+  const handleCarouselImageChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (file && handleFileValidation(file)) {
+      setSelectedCarouselImage(file);
+    }
+  };
+
+  const handleCarouselDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setCarouselDragActive(true);
+    } else if (e.type === "dragleave") {
+      setCarouselDragActive(false);
+    }
+  };
+
+  const handleCarouselDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCarouselDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (handleFileValidation(file)) {
+        setSelectedCarouselImage(file);
+      }
+    }
+  };
+
   // --- API Logic ---
   const uploadImage = async (categoryId: string) => {
     if (!selectedImage) return;
 
     try {
       const formData = new FormData();
-      formData.append("image", selectedImage);
+      formData.append("normal_image", selectedImage);
       formData.append("category", categoryId);
-      formData.append("type", "normal");
 
       const response = await axios.post(
         `${domainUrl}products/uploads/`,
@@ -93,7 +128,7 @@ const AddCategory: React.FC = () => {
             "Content-Type": "multipart/form-data",
             Authorization: `Bearer ${access_token}`,
           },
-        }
+        },
       );
 
       if (response.status === 201) {
@@ -108,6 +143,33 @@ const AddCategory: React.FC = () => {
         toast.error("Session expired.", { position: "top-right" });
       } else {
         toast.error("Image upload failed.", { position: "top-center" });
+      }
+    }
+  };
+
+  const uploadCarouselImage = async (categoryId: string) => {
+    if (!selectedCarouselImage) return;
+
+    try {
+      const formData = new FormData();
+      formData.append("carousel_image", selectedCarouselImage);
+      formData.append("category", categoryId);
+
+      await axios.post(`${domainUrl}products/uploads/`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${access_token}`,
+        },
+      });
+    } catch (err: any) {
+      if (err.response?.data.code === "token_not_valid") {
+        logOutHandler();
+        navigate("/login");
+        toast.error("Session expired.", { position: "top-right" });
+      } else {
+        toast.error("Carousel image upload failed.", {
+          position: "top-center",
+        });
       }
     }
   };
@@ -142,8 +204,13 @@ const AddCategory: React.FC = () => {
         });
       }
 
+      if (selectedCarouselImage) {
+        await uploadCarouselImage(category_id);
+      }
+
       setCategoryData({ category_code: "", name: "", description: "" });
       setSelectedImage(null);
+      setSelectedCarouselImage(null);
     } catch (err: any) {
       if (err.response?.data.code === "token_not_valid") {
         logOutHandler();
@@ -193,12 +260,12 @@ const AddCategory: React.FC = () => {
   // );
 
   return (
-    <div className="min-h-screen bg-gray-50 rounded-2xl dark:bg-black p-4 sm:p-6 lg:p-8 transition-colors duration-500">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 transition-colors duration-500">
       <div className="max-w-5xl mx-auto">
         {/* Header Navigation */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-4 mb-6">
           <div>
-            <h1 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
+            <h1 className="text-xl font-semibold text-zinc-900 dark:text-white tracking-tight">
               Add New Category
             </h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
@@ -207,15 +274,15 @@ const AddCategory: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Form Section (2 Columns) */}
           <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800">
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+            <div className="bg-white dark:bg-zinc-950 rounded-xl border border-gray-200/60 dark:border-zinc-800/60 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-gray-200/60 dark:border-zinc-800/60">
+                <h3 className="text-base font-semibold text-zinc-900 dark:text-white">
                   Category Details
                 </h3>
-                <p className="text-xs text-zinc-500 mt-1">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
                   Fill in the information below to create a new category.
                 </p>
               </div>
@@ -328,7 +395,7 @@ const AddCategory: React.FC = () => {
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <input
-                        ref={fileInputRef}
+                          ref={fileInputRef}
                           type="file"
                           id="image-upload"
                           className="hidden"
@@ -374,6 +441,91 @@ const AddCategory: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setSelectedImage(null)}
+                            className="p-2 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          >
+                            <XMarkIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Carousel Image Upload (Full Width) */}
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                      Carousel Image{" "}
+                      <span className="text-xs text-zinc-400 font-normal">
+                        (Optional)
+                      </span>
+                    </label>
+
+                    {!selectedCarouselImage ? (
+                      <div
+                        className={`relative border-2 border-dashed rounded-xl p-8 transition-all text-center cursor-pointer ${
+                          carouselDragActive
+                            ? "border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-900/20"
+                            : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600"
+                        }`}
+                        onDragEnter={handleCarouselDrag}
+                        onDragLeave={handleCarouselDrag}
+                        onDragOver={handleCarouselDrag}
+                        onDrop={handleCarouselDrop}
+                        onClick={() => carouselFileInputRef.current?.click()}
+                      >
+                        <input
+                          ref={carouselFileInputRef}
+                          type="file"
+                          id="carousel-image-upload"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={handleCarouselImageChange}
+                        />
+                        <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                          <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-full">
+                            <PhotoIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                          </div>
+                          <p className="text-sm font-medium text-zinc-900 dark:text-white">
+                            <span
+                              className="text-indigo-600 dark:text-indigo-400 font-bold underline cursor-pointer pointer-events-auto"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                carouselFileInputRef.current?.click();
+                              }}
+                            >
+                              Click to upload
+                            </span>{" "}
+                            carousel image
+                          </p>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            For slideshow display (max. 1MB)
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative group rounded-xl overflow-hidden border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20">
+                        <div className="flex items-center gap-4 p-3">
+                          <img
+                            src={URL.createObjectURL(selectedCarouselImage)}
+                            alt="Carousel Preview"
+                            className="h-16 w-16 object-cover rounded-lg border-2 border-indigo-300 dark:border-indigo-700"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                                Carousel
+                              </span>
+                            </div>
+                            <p className="text-sm font-bold text-zinc-900 dark:text-white truncate">
+                              {selectedCarouselImage.name}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              {(selectedCarouselImage.size / 1024).toFixed(1)}{" "}
+                              KB
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCarouselImage(null)}
                             className="p-2 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           >
                             <XMarkIcon className="h-5 w-5" />

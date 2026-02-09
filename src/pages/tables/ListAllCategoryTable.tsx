@@ -187,8 +187,13 @@ const EditModal = ({ isOpen, onClose, category, onSave, loading }: any) => {
     is_active: true,
   });
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedCarouselImage, setSelectedCarouselImage] =
+    useState<File | null>(null);
   const [currentImageUrl, setCurrentImageUrl] = useState<string>("");
+  const [currentCarouselImageUrl, setCurrentCarouselImageUrl] =
+    useState<string>("");
   const [dragActive, setDragActive] = useState(false);
+  const [carouselDragActive, setCarouselDragActive] = useState(false);
 
   // Initialize form when category changes
   useEffect(() => {
@@ -199,9 +204,16 @@ const EditModal = ({ isOpen, onClose, category, onSave, loading }: any) => {
         description: category.description,
         is_active: category.is_active,
       });
-      const img = category.images.find((i: any) => i.type === "normal")?.url || category.images[0]?.url || "";
+      const img =
+        category.images.find((i: any) => i.type === "normal")?.url ||
+        category.images[0]?.url ||
+        "";
+      const carouselImg =
+        category.images.find((i: any) => i.type === "carousel")?.url || "";
       setCurrentImageUrl(img);
+      setCurrentCarouselImageUrl(carouselImg);
       setSelectedImage(null);
+      setSelectedCarouselImage(null);
     }
   }, [category, isOpen]);
 
@@ -231,29 +243,73 @@ const EditModal = ({ isOpen, onClose, category, onSave, loading }: any) => {
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.size > 1024 * 1024) {
-         toast.error("Image must be < 1MB");
-         return;
+        toast.error("Image must be < 1MB");
+        return;
       }
       setSelectedImage(file);
     }
   };
 
+  // Carousel image handlers
+  const handleCarouselImageChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 1024 * 1024) {
+        toast.error("Carousel image must be < 1MB");
+        return;
+      }
+      setSelectedCarouselImage(file);
+    }
+  };
+
+  const handleCarouselDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover")
+      setCarouselDragActive(true);
+    else if (e.type === "dragleave") setCarouselDragActive(false);
+  };
+
+  const handleCarouselDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCarouselDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.size > 1024 * 1024) {
+        toast.error("Carousel image must be < 1MB");
+        return;
+      }
+      setSelectedCarouselImage(file);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(category.category_id, formData, selectedImage);
+    onSave(
+      category.category_id,
+      formData,
+      selectedImage,
+      selectedCarouselImage,
+    );
   };
 
   // Determine which image to show in preview
-  const displayImage = selectedImage 
-    ? URL.createObjectURL(selectedImage) 
+  const displayImage = selectedImage
+    ? URL.createObjectURL(selectedImage)
     : currentImageUrl;
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         {/* Backdrop */}
-        <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-md" aria-hidden="true" />
-        
+        <div
+          className="fixed inset-0 bg-zinc-900/60 backdrop-blur-md"
+          aria-hidden="true"
+        />
+
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <Transition.Child
@@ -266,160 +322,302 @@ const EditModal = ({ isOpen, onClose, category, onSave, loading }: any) => {
               leaveTo="opacity-0 scale-95 translate-y-8"
             >
               <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-3xl bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 shadow-2xl transition-all">
-                
                 {/* Header */}
                 <div className="px-8 py-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                    <div>
-                        <Dialog.Title as="h3" className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
-                            Edit Category
-                        </Dialog.Title>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                            Modify category details, appearance, and status.
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-2 rounded-full text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
-                        <XMarkIcon className="h-6 w-6" />
-                    </button>
+                  <div>
+                    <Dialog.Title
+                      as="h3"
+                      className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight"
+                    >
+                      Edit Category
+                    </Dialog.Title>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+                      Modify category details, appearance, and status.
+                    </p>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-full text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:divide-x divide-zinc-100 dark:divide-zinc-800">
-                    
-                    {/* --- LEFT COLUMN: FORM --- */}
-                    <div className="lg:col-span-2 p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                        <form id="cat-edit-form" onSubmit={handleSubmit} className="space-y-6">
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <ModalInput 
-                                    label="Category Code" 
-                                    id="edit-code" 
-                                    value={formData.category_code} 
-                                    onChange={(e: any) => setFormData({ ...formData, category_code: e.target.value })} 
-                                    disabled={loading}
-                                    placeholder="e.g. ELEC-001"
-                                />
-                                <ModalInput 
-                                    label="Category Name" 
-                                    id="edit-name" 
-                                    value={formData.name} 
-                                    onChange={(e: any) => setFormData({ ...formData, name: e.target.value })} 
-                                    disabled={loading}
-                                    placeholder="e.g. Electronics"
-                                />
-                            </div>
+                  {/* --- LEFT COLUMN: FORM --- */}
+                  <div className="lg:col-span-2 p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    <form
+                      id="cat-edit-form"
+                      onSubmit={handleSubmit}
+                      className="space-y-6"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <ModalInput
+                          label="Category Code"
+                          id="edit-code"
+                          value={formData.category_code}
+                          onChange={(e: any) =>
+                            setFormData({
+                              ...formData,
+                              category_code: e.target.value,
+                            })
+                          }
+                          disabled={loading}
+                          placeholder="e.g. ELEC-001"
+                        />
+                        <ModalInput
+                          label="Category Name"
+                          id="edit-name"
+                          value={formData.name}
+                          onChange={(e: any) =>
+                            setFormData({ ...formData, name: e.target.value })
+                          }
+                          disabled={loading}
+                          placeholder="e.g. Electronics"
+                        />
+                      </div>
 
-                            <ModalInput
-                                label="Description"
-                                id="edit-desc"
-                                value={formData.description}
-                                onChange={(e: any) => setFormData({ ...formData, description: e.target.value })}
-                                textarea
-                                disabled={loading}
-                                placeholder="Describe this category..."
-                            />
+                      <ModalInput
+                        label="Description"
+                        id="edit-desc"
+                        value={formData.description}
+                        onChange={(e: any) =>
+                          setFormData({
+                            ...formData,
+                            description: e.target.value,
+                          })
+                        }
+                        textarea
+                        disabled={loading}
+                        placeholder="Describe this category..."
+                      />
 
-                            {/* Status Toggle Card */}
-                            <div 
-                                onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
-                                className="cursor-pointer group flex items-center justify-between p-4 rounded-xl border transition-all duration-200 bg-zinc-50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
+                      {/* Status Toggle Card */}
+                      <div
+                        onClick={() =>
+                          setFormData({
+                            ...formData,
+                            is_active: !formData.is_active,
+                          })
+                        }
+                        className="cursor-pointer group flex items-center justify-between p-4 rounded-xl border transition-all duration-200 bg-zinc-50 border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-2 rounded-lg ${formData.is_active ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : "bg-zinc-200 text-zinc-500 dark:bg-zinc-800"}`}
+                          >
+                            {formData.is_active ? (
+                              <CheckCircleIcon className="h-5 w-5" />
+                            ) : (
+                              <XCircleIcon className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div>
+                            <p
+                              className={`text-sm font-bold ${formData.is_active ? "text-emerald-900 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-300"}`}
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-lg ${formData.is_active ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30" : "bg-zinc-200 text-zinc-500 dark:bg-zinc-800"}`}>
-                                        {formData.is_active ? <CheckCircleIcon className="h-5 w-5" /> : <XCircleIcon className="h-5 w-5" />}
-                                    </div>
-                                    <div>
-                                        <p className={`text-sm font-bold ${formData.is_active ? "text-emerald-900 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-300"}`}>
-                                            {formData.is_active ? "Active Status" : "Inactive Status"}
-                                        </p>
-                                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                            {formData.is_active ? "Visible to customers" : "Hidden from store"}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${formData.is_active ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>
-                                    <span aria-hidden="true" className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.is_active ? 'translate-x-5' : 'translate-x-0'}`} />
-                                </div>
-                            </div>
+                              {formData.is_active
+                                ? "Active Status"
+                                : "Inactive Status"}
+                            </p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {formData.is_active
+                                ? "Visible to customers"
+                                : "Hidden from store"}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${formData.is_active ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${formData.is_active ? "translate-x-5" : "translate-x-0"}`}
+                          />
+                        </div>
+                      </div>
 
-                            {/* Drag & Drop Image */}
-                            <div className="space-y-2">
-                                <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Category Image</label>
-                                <div
-                                    className={`relative h-40 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
-                                    dragActive
-                                        ? "border-black bg-zinc-50 dark:border-white dark:bg-zinc-900"
-                                        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 bg-zinc-50/50 dark:bg-zinc-900/50"
-                                    }`}
-                                    onDragEnter={handleDrag}
-                                    onDragLeave={handleDrag}
-                                    onDragOver={handleDrag}
-                                    onDrop={handleDrop}
-                                    onClick={() => document.getElementById('modal-cat-upload')?.click()}
-                                >
-                                    <input
-                                        type="file"
-                                        id="modal-cat-upload"
-                                        className="hidden"
-                                        accept="image/*"
-                                        onChange={handleImageChange}
-                                        disabled={loading}
-                                    />
-                                    <div className="p-3 rounded-full bg-white dark:bg-zinc-800 shadow-sm mb-2">
-                                        <CloudArrowUpIcon className="h-6 w-6 text-zinc-400" />
-                                    </div>
-                                    <p className="text-sm font-medium text-zinc-900 dark:text-white">
-                                        {selectedImage ? "File Selected" : "Click to upload or drag and drop"}
-                                    </p>
-                                    <p className="text-xs text-zinc-500 mt-1">
-                                        {selectedImage ? selectedImage.name : "SVG, PNG, JPG (Max 1MB)"}
-                                    </p>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-
-                    {/* --- RIGHT COLUMN: LIVE PREVIEW --- */}
-                    <div className="lg:col-span-1 bg-zinc-50 dark:bg-zinc-900/50 p-8 flex flex-col gap-6">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Live Preview</h4>
-                        
-                        {/* Preview Card */}
-                        <div className="bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden group">
-                            {/* Image Area */}
-                            <div className="h-40 bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center overflow-hidden relative">
-                                {displayImage ? (
-                                    <img src={displayImage} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" alt="Preview" />
-                                ) : (
-                                    <PhotoIcon className="h-12 w-12 text-zinc-300 dark:text-zinc-700" />
-                                )}
-                                {/* Code Badge */}
-                                <div className="absolute top-3 left-3">
-                                    <span className="px-2 py-1 rounded bg-black/60 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider">
-                                        {formData.category_code || "CODE"}
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            {/* Content Area */}
-                            <div className="p-5">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="font-bold text-zinc-900 dark:text-white text-lg line-clamp-1">
-                                        {formData.name || "Category Name"}
-                                    </h3>
-                                </div>
-                                <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-3 mb-4 min-h-[3rem]">
-                                    {formData.description || "Description will appear here..."}
+                      {/* Image Uploads Section */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Category Image */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                            Category Image
+                          </label>
+                          <div
+                            className={`relative h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
+                              dragActive
+                                ? "border-black bg-zinc-50 dark:border-white dark:bg-zinc-900"
+                                : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 bg-zinc-50/50 dark:bg-zinc-900/50"
+                            }`}
+                            onDragEnter={handleDrag}
+                            onDragLeave={handleDrag}
+                            onDragOver={handleDrag}
+                            onDrop={handleDrop}
+                            onClick={() =>
+                              document
+                                .getElementById("modal-cat-upload")
+                                ?.click()
+                            }
+                          >
+                            <input
+                              type="file"
+                              id="modal-cat-upload"
+                              className="hidden"
+                              accept="image/*"
+                              onChange={handleImageChange}
+                              disabled={loading}
+                            />
+                            {selectedImage || currentImageUrl ? (
+                              <div className="flex flex-col items-center gap-2 px-3">
+                                <img
+                                  src={
+                                    selectedImage
+                                      ? URL.createObjectURL(selectedImage)
+                                      : currentImageUrl
+                                  }
+                                  alt="Category Preview"
+                                  className="h-16 w-16 object-cover rounded-lg border border-zinc-300 dark:border-zinc-700"
+                                />
+                                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-full">
+                                  {selectedImage
+                                    ? selectedImage.name
+                                    : "Current image"}
                                 </p>
-                                
-                                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
-                                    <div className={`h-2 w-2 rounded-full ${formData.is_active ? "bg-emerald-500" : "bg-zinc-300"}`} />
-                                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                                        {formData.is_active ? "Active" : "Inactive"}
-                                    </span>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="p-2 rounded-full bg-white dark:bg-zinc-800 shadow-sm mb-1">
+                                  <CloudArrowUpIcon className="h-5 w-5 text-zinc-400" />
                                 </div>
-                            </div>
+                                <p className="text-xs font-medium text-zinc-900 dark:text-white px-2">
+                                  Upload Image
+                                </p>
+                              </>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Tips */}
-                        {/* <div className="rounded-xl border border-blue-100 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-900/20 p-4">
+                        {/* Carousel Image */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+                            Carousel Image{" "}
+                            <span className="text-xs text-zinc-400 font-normal">
+                              (Optional)
+                            </span>
+                          </label>
+                          <div
+                            className={`relative h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
+                              carouselDragActive
+                                ? "border-indigo-600 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-950"
+                                : "border-indigo-200 dark:border-indigo-800 hover:border-indigo-400 dark:hover:border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/50"
+                            }`}
+                            onDragEnter={handleCarouselDrag}
+                            onDragLeave={handleCarouselDrag}
+                            onDragOver={handleCarouselDrag}
+                            onDrop={handleCarouselDrop}
+                            onClick={() =>
+                              document
+                                .getElementById("modal-carousel-upload")
+                                ?.click()
+                            }
+                          >
+                            <input
+                              type="file"
+                              id="modal-carousel-upload"
+                              className="hidden"
+                              accept="image/*"
+                              onChange={handleCarouselImageChange}
+                              disabled={loading}
+                            />
+                            {selectedCarouselImage ||
+                            currentCarouselImageUrl ? (
+                              <div className="flex flex-col items-center gap-2 px-3">
+                                <img
+                                  src={
+                                    selectedCarouselImage
+                                      ? URL.createObjectURL(
+                                          selectedCarouselImage,
+                                        )
+                                      : currentCarouselImageUrl
+                                  }
+                                  alt="Carousel Preview"
+                                  className="h-16 w-16 object-cover rounded-lg border-2 border-indigo-300 dark:border-indigo-700"
+                                />
+                                <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300 truncate max-w-full">
+                                  {selectedCarouselImage
+                                    ? selectedCarouselImage.name
+                                    : "Current carousel"}
+                                </p>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="p-2 rounded-full bg-white dark:bg-zinc-800 shadow-sm mb-1">
+                                  <CloudArrowUpIcon className="h-5 w-5 text-indigo-400" />
+                                </div>
+                                <p className="text-xs font-medium text-zinc-900 dark:text-white px-2">
+                                  Upload Carousel
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* --- RIGHT COLUMN: LIVE PREVIEW --- */}
+                  <div className="lg:col-span-1 bg-zinc-50 dark:bg-zinc-900/50 p-8 flex flex-col gap-6">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                      Live Preview
+                    </h4>
+
+                    {/* Preview Card */}
+                    <div className="bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden group">
+                      {/* Image Area */}
+                      <div className="h-40 bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center overflow-hidden relative">
+                        {displayImage ? (
+                          <img
+                            src={displayImage}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            alt="Preview"
+                          />
+                        ) : (
+                          <PhotoIcon className="h-12 w-12 text-zinc-300 dark:text-zinc-700" />
+                        )}
+                        {/* Code Badge */}
+                        <div className="absolute top-3 left-3">
+                          <span className="px-2 py-1 rounded bg-black/60 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider">
+                            {formData.category_code || "CODE"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Content Area */}
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-zinc-900 dark:text-white text-lg line-clamp-1">
+                            {formData.name || "Category Name"}
+                          </h3>
+                        </div>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-3 mb-4 min-h-[3rem]">
+                          {formData.description ||
+                            "Description will appear here..."}
+                        </p>
+
+                        <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                          <div
+                            className={`h-2 w-2 rounded-full ${formData.is_active ? "bg-emerald-500" : "bg-zinc-300"}`}
+                          />
+                          <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                            {formData.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tips */}
+                    {/* <div className="rounded-xl border border-blue-100 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-900/20 p-4">
                             <div className="flex gap-3">
                                 <div className="shrink-0 text-blue-500">
                                     <TagIcon className="h-5 w-5" />
@@ -432,24 +630,35 @@ const EditModal = ({ isOpen, onClose, category, onSave, loading }: any) => {
                                 </div>
                             </div>
                         </div> */}
-                    </div>
+                  </div>
                 </div>
 
                 {/* Footer Actions */}
                 <div className="px-8 py-5 bg-zinc-50 dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                    <button type="button" className="text-sm font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white transition-colors" onClick={onClose} disabled={loading}>
-                      Discard Changes
-                    </button>
-                    <button type="submit" form="cat-edit-form" disabled={loading} className="px-8 py-2.5 text-sm font-bold text-white bg-black dark:bg-white dark:text-black rounded-xl hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-lg shadow-zinc-200 dark:shadow-zinc-900 flex items-center gap-2">
-                        {loading ? (
-                            <>
-                                <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                                Saving...
-                            </>
-                        ) : "Save Changes"}
-                    </button>
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white transition-colors"
+                    onClick={onClose}
+                    disabled={loading}
+                  >
+                    Discard Changes
+                  </button>
+                  <button
+                    type="submit"
+                    form="cat-edit-form"
+                    disabled={loading}
+                    className="px-8 py-2.5 text-sm font-bold text-white bg-black dark:bg-white dark:text-black rounded-xl hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-lg shadow-zinc-200 dark:shadow-zinc-900 flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
                 </div>
-
               </Dialog.Panel>
             </Transition.Child>
           </div>
@@ -481,7 +690,7 @@ export const ListAllCategoryTable = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(
-    null
+    null,
   );
 
   const fetchCategories = async () => {
@@ -502,7 +711,7 @@ export const ListAllCategoryTable = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${access_token}`,
           },
-        }
+        },
       );
       // Prefer server-filtered results but defensively ensure only active categories
       const filtered = response.data.results.filter((c) => c.is_active);
@@ -548,7 +757,8 @@ export const ListAllCategoryTable = () => {
   const handleEditSave = async (
     id: number,
     data: any,
-    imageFile: File | null
+    imageFile: File | null,
+    carouselFile: File | null,
   ) => {
     setActionLoading(true);
     try {
@@ -557,18 +767,78 @@ export const ListAllCategoryTable = () => {
         headers: { Authorization: `Bearer ${access_token}` },
       });
 
-      // 2. Upload Image (if changed)
+      // 2. Upload Normal Image (if changed)
       if (imageFile) {
-        const formData = new FormData();
-        formData.append("image", imageFile);
-        formData.append("category", id.toString());
-        formData.append("type", "normal");
-        await axios.post(`${domainUrl}products/uploads/`, formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${access_token}`,
-          },
-        });
+        const category = categories.find((c) => c.category_id === id);
+        const normalImage = category?.images?.find((i) => i.type === "normal");
+
+        if (normalImage) {
+          // Update existing normal image - use PUT with 'image' field
+          const formData = new FormData();
+          formData.append("image", imageFile);
+          formData.append("category", id.toString());
+
+          await axios.put(
+            `${domainUrl}products/uploads/${normalImage.id}/`,
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+                Authorization: `Bearer ${access_token}`,
+              },
+            },
+          );
+        } else {
+          // Create new normal image - use POST with 'normal_image' field
+          const formData = new FormData();
+          formData.append("normal_image", imageFile);
+          formData.append("category", id.toString());
+
+          await axios.post(`${domainUrl}products/uploads/`, formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${access_token}`,
+            },
+          });
+        }
+      }
+
+      // 3. Upload Carousel Image (if changed)
+      if (carouselFile) {
+        const category = categories.find((c) => c.category_id === id);
+        const carouselImage = category?.images?.find(
+          (i) => i.type === "carousel",
+        );
+
+        if (carouselImage) {
+          // Update existing carousel image - use PUT with 'image' field
+          const formData = new FormData();
+          formData.append("image", carouselFile);
+          formData.append("category", id.toString());
+
+          await axios.put(
+            `${domainUrl}products/uploads/${carouselImage.id}/`,
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+                Authorization: `Bearer ${access_token}`,
+              },
+            },
+          );
+        } else {
+          // Create new carousel image - use POST with 'carousel_image' field
+          const formData = new FormData();
+          formData.append("carousel_image", carouselFile);
+          formData.append("category", id.toString());
+
+          await axios.post(`${domainUrl}products/uploads/`, formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Authorization: `Bearer ${access_token}`,
+            },
+          });
+        }
       }
 
       toast.success("Category updated successfully");
@@ -595,7 +865,7 @@ export const ListAllCategoryTable = () => {
         `${domainUrl}products/categories/${selectedCategory.category_id}/`,
         {
           headers: { Authorization: `Bearer ${access_token}` },
-        }
+        },
       );
       toast.success("Category deleted");
       setIsDeleteOpen(false);
@@ -623,7 +893,6 @@ export const ListAllCategoryTable = () => {
             </p>
           </div>
           <div className="flex items-center gap-3">
-         
             <button
               onClick={() => navigate("/add-category")}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-black dark:bg-white dark:text-black rounded-lg hover:opacity-90 transition-all shadow-lg shadow-zinc-200 dark:shadow-none"
@@ -793,7 +1062,6 @@ export const ListAllCategoryTable = () => {
                       {/* Actions */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1  transition-opacity">
-                       
                           <button
                             className="p-1.5 text-zinc-400 hover:text-black dark:hover:text-white rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             title="Edit"
